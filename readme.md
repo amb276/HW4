@@ -1,64 +1,61 @@
-# Faker, Generating test data, and adding your package to command line app.
+# conftest.py
+import pytest
+from decimal import Decimal
+from faker import Faker # type: ignore
+from calculator.operations import add, subtract, multiply, divide
 
-For this homework. what you need to do is add the following features to **your own** calculator project:
+fake_data = Faker()
 
-1. Add the "faker" libary with the command "pip install faker" and then do a pip freeze > requirements.txt.  **Tip:  First Deactivate the virtual environment with the command "deactivate" and then activate it again** This is so that you will only add faker to the requirements and that your virtual environent is the current one that your working on when faker is installed.  Review the faker website [here](https://faker.readthedocs.io/en/master/#).  Once you add the library you need to update your tests to use the fake data.  Do a basic implementation first and understand how it works.  Review the faker library documentation, its important that you learn how faker works because it's an invaluable tool for development.
+def create_data_samples(sample_count):
+    """Generate and yield random test data including values and operations."""
+    operations_dict = {
+        'add': add,
+        'subtract': subtract,
+        'multiply': multiply,
+        'divide': divide
+    }
 
-2. Add a new command to pytest to generate  N number of records, so that you can run the following command: **pytest --num_records=100** to generate 100 records.  **The code to do this is in the tests/conftest.py file** and is a little complicated but ask ChatGPT, or me and study it a bit.  Basically what happens is that records are generated and in the background the parameters for a,b,operation, expected result are created and there is a special method to generate test data that is automaticly called when these variables are passed in, so it just keeps calling the test function to test it.  You kinda just need to have a leap of faith that its going to work, since the pytest library is doing all the work in the background.
+    index = 0
+    while index < sample_count:
+        # Create two random values, one of which could be a single-digit for variability
+        first_value = Decimal(fake_data.random_number(digits=3))
+        second_value = Decimal(fake_data.random_number(digits=3)) if index % 5 != 0 else Decimal(fake_data.random_number(digits=1))
+        
+        # Select a random operation from the operations dictionary
+        operation_key = fake_data.random_element(elements=list(operations_dict.keys()))
+        operation_func = operations_dict[operation_key]
 
-3. Add a main.py file to serve as an entry point to your program and add the code from my main.py, so that you can have some exception handling to your program.  Review the code in main.py to see how exceptions are caught when bad input is submitted by the user of your program.  
+        # Prevent division by zero if the operation is division
+        if operation_func == divide and second_value == Decimal('0'):
+            second_value = Decimal('1')
 
-### The command you add will be able to handle the following test cases (see my test_main.py test file):
-* a, b, operation, expected result
-* "5", "3", 'add', "The result of 5 add 3 is equal to 8"
-* "10", "2", 'subtract', "The result of 10 subtract 2 is equal to 8"
-* "4", "5", 'multiply', "The result of 4 multiply 5 is equal to 20"
-* "20", "4", 'divide', "The result of 20 divide 4 is equal to 5"
-* "1", "0", 'divide', "An error occurred: Cannot divide by zero"  
-* "9", "3", 'unknown', "Unknown operation: unknown"  # Test for unknown operation
-* "a", "3", 'add', "Invalid number input: a or 3 is not a valid number."  # Testing invalid number input
-* "5", "b", 'subtract', "Invalid number input: 5 or b is not a valid number." # Testing another invalid number input
+        # Determine the expected result or error
+        try:
+            if operation_func == divide and second_value == Decimal('0'):
+                result = "ZeroDivisionError"
+            else:
+                result = operation_func(first_value, second_value)
+        except ZeroDivisionError:
+            result = "ZeroDivisionError"
 
+        yield first_value, second_value, operation_key, operation_func, result
+        index += 1
 
-## Submission Instructions
-1.  Use the repo from your previous assignment and update it with the features above.  Use a branch for each feature and get each feature to work and then merge it.  Branch -> complete feature -> merge -> repeat for each feature
+def pytest_addoption(parser):
+    """Add an option to specify the number of records to generate via command line."""
+    parser.addoption("--num_records", action="store", default=5, type=int, help="Number of test cases to generate")
 
-2.  Submit a link to your repository to Canvas when your finished.
+def pytest_generate_tests(metafunc):
+    """Inject generated test data into the test functions."""
+    if {"a", "b", "expected"}.intersection(set(metafunc.fixturenames)):
+        num_records = metafunc.config.getoption("num_records")
+        test_data = list(create_data_samples(num_records))
 
-## Grading:
+        # Adjust the structure of the parameters for flexibility with operation names
+        data_for_parametrize = [
+            (first_value, second_value, op_key if 'operation_name' in metafunc.fixturenames else op_func, result)
+            for first_value, second_value, op_key, op_func, result in test_data
+        ]
 
-1.  30 Points - Faker 
-2.  30 Points - Test Data Generation
-3.  40 Points - User Input
+        metafunc.parametrize("a,b,operation,expected", data_for_parametrize)
 
-## To get my code to run / Install Instructions
-
-1.  Clone the repo
-2.  CD into the repo directory
-3.  Create the virtual environment
-4.  Activate the virtual environment
-5.  Install the requirements with pip or pip3 install requirements.
-6.  Try out the test data functionality "pytest --num_records=100"
-7.  Try out the user input functionality on the command line: "python main.py 1 2 add"
-
-### Testing Instructions
-* pytest --num_records=10
-* pytest --pylint --cov 
-
-
-Basic tips:
-* Don't repeat yourslf #1 rule
-* Separate each thing the program needs to do, so its organized and your functions only do one thing
-
-
-You should create new branches for each version of your progarm and work from the most simple, which is the first branch (main) and then keep upgrading your program until you have all of the requirements met.  Please don't just copy and paste my final program, or you will not learn anything.  Soon you will have to design your own program without any examples, which will be your mid-term.  I have commented the code with explanations, so you can understand it better.   
-
-
-## Instructor Video and Required Readings
-
-1.  Instructor Video 1 Faker and Test Data Generation - [here](https://youtu.be/4x6JP0eUVzo)
-2.  [Python Try Accept](https://www.geeksforgeeks.org/python-try-except/)
-3.  [Python Command Line Arg Parsing](https://realpython.com/command-line-interfaces-python-argparse/)
-4.  [Python Faker Library Standard Fake Data Available](https://faker.readthedocs.io/en/stable/providers.html)
-5.  [Using Python Fake and Synthetic Data](https://www.udacity.com/blog/2023/03/creating-fake-data-in-python-using-faker.html)
-6.  [Pytest and Generating Data GOod explanation](https://pytest-with-eric.com/introduction/pytest-generate-tests/)
